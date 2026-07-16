@@ -118,6 +118,23 @@ def graph_trials(stats, dimensions):
         capsize=5
     )
 
+    label_dimensions = [25, 27, 32, 37, 41, 43, 47, 49]
+
+    for D in label_dimensions:
+        if D not in stats:
+            continue
+
+        mean = stats[D]["mean"]
+
+        plt.annotate(
+            f"D={D}",
+            (D, mean),
+            textcoords="offset points",
+            xytext=(0, 8),
+            ha="center",
+            fontsize=8
+        )
+
     plt.xlabel("Dimension D")
     plt.ylabel("Mean Runtime (seconds)")
     plt.title("Mean MUB Runtime vs Dimension with Standard Error")
@@ -131,7 +148,7 @@ def main():
     runtimes = runtime_MUBs(dimensions, SEED)
 
     # Plot the runtimes
-    standard_graph(runtimes, dimensions)
+    # standard_graph(runtimes, dimensions)
 
     # Number of trials
     count = 100
