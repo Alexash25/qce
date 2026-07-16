@@ -28,14 +28,14 @@ from itertools import product
 # stored as the LOW coefficients c0..c_{n-1} of  x^n + c_{n-1} x^{n-1}
 # + ... + c0.  Verified irreducible for the (p,n) needed here.
 _IRRED = {
-    (2, 2): [1, 1],          # x^2 + x + 1
-    (2, 3): [1, 1, 0],       # x^3 + x + 1
-    (2, 4): [1, 1, 0, 0],    # x^4 + x + 1
-    (2, 5): [1, 0, 1, 0, 0], # x^5 + x^2 + 1
-    (3, 2): [1, 0],          # x^2 + 1
-    (3, 3): [1, 2, 0],       # x^3 + 2x + 1
-    (5, 2): [2, 0],          # x^2 + 2
-    (7, 2): [1, 0],          # x^2 + 1
+    (2, 2): [1, 1],          # x^2 + x + 1      4
+    (2, 3): [1, 1, 0],       # x^3 + x + 1      8
+    (2, 4): [1, 1, 0, 0],    # x^4 + x + 1      16
+    (2, 5): [1, 0, 1, 0, 0], # x^5 + x^2 + 1    32
+    (3, 2): [1, 0],          # x^2 + 1          9
+    (3, 3): [1, 2, 0],       # x^3 + 2x + 1     27
+    (5, 2): [2, 0],          # x^2 + 2          25
+    (7, 2): [1, 0],          # x^2 + 1          49
 }
 
 # Chekcs to see if the number can be broken down to p^n
