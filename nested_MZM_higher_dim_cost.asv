@@ -1,8 +1,9 @@
 %% ==============================================================
-% Nested MZM Higher Dimensional Cost Function
+% Nested MZM Higher Dimensional Cost Script
 % Alexander Tiu 7/20/2026
 %% ==============================================================
 
+% Cost function
 function cost = nested_MZM_higher_dim_cost( ...
     x, ...
     target_orders, ...
@@ -12,74 +13,72 @@ function cost = nested_MZM_higher_dim_cost( ...
     D)
 
     %% Step 1: Validate and organize inputs
-
-    % Dimension must be a positive integer greater than one.
+    % Dimension must be a positive integer greater than one
     if ~isscalar(D) || D < 2 || D ~= floor(D)
         error('D must be an integer greater than or equal to 2.');
     end
 
-    % RF drive contains one tone for each harmonic.
+    % RF drive contains one tone for each harmonic
     num_tones = D - 1;
     expected_num_vars = 8 * num_tones + 2;
-
-    % Convert the supplied arrays into row vectors.
+    
+    % Convert the supplied arrays into row vectors
     x = x(:).';
     target_orders = target_orders(:).';
     target_amplitudes = target_amplitudes(:).';
     target_phases = target_phases(:).';
     order_range = order_range(:).';
-
-    % Check the number of parameters.
+    
+    % Expected parameters
     if numel(x) ~= expected_num_vars
         error( ...
             'Expected %d parameters for D = %d, but received %d.', ...
             expected_num_vars, D, numel(x));
     end
-
-    % Each target order must have one amplitude and one phase.
+    
+    % Each target order must have one target amplitude and one target phase
     if numel(target_orders) ~= numel(target_amplitudes) || ...
             numel(target_orders) ~= numel(target_phases)
-
+    
         error([ ...
             'target_orders, target_amplitudes, and target_phases ' ...
             'must have the same number of elements.']);
     end
-
-    % Every target order must exist within order_range.
+    
+    % Every target order must exist within order range
     if ~all(ismember(target_orders, order_range))
         error('Every target order must be included in order_range.');
     end
-
-
-    %% Step 2: Unpack nested-MZM parameters
-
-    % Indices of the four groups of modulation depths.
+    
+    %% Step 2: Unpack nested-MZM params
+    % Indices of the four groups of mod depths
     beta_start = 1;
     beta_end = 4 * num_tones;
-
-    % Indices of the four groups of RF phases.
+    
+    % Indices of the four groups of RF-phase params
     phi_start = beta_end + 1;
     phi_end = beta_end + 4 * num_tones;
-
-    % beta has size 4 x (D - 1).
+    
+    % Arrange such that beta has size 4 * (D-1)
     beta = reshape( ...
         x(beta_start:beta_end), ...
         [num_tones, 4]).';
-
-    % phi also has size 4 x (D - 1).
+    
+    % Same arrangement for phase
     phi = reshape( ...
         x(phi_start:phi_end), ...
         [num_tones, 4]).';
-
-    % Final two parameters are bias phases.
+    
+    % Final two parameters
     phi_bias_1 = x(phi_end + 1);
     phi_bias_2 = x(phi_end + 2);
-
-
+    
     %% Step 3: Calculate the spectrum for each modulated arm
 
-    % Match the Bessel truncation used in the original D = 4 model.
     max_bessel_order = 4;
+
+    % Calculate the complex frequency-bin spectrum produced by each of the
+    % four arms
 
     E_arm_1 = calculate_arm_spectrum( ...
         beta(1, :), ...
@@ -105,111 +104,57 @@ function cost = nested_MZM_higher_dim_cost( ...
         order_range, ...
         max_bessel_order);
 
-
     %% Step 4: Combine the four arms
 
-    % First internal MZI pair.
+    % bias_1 controls relative phase between the two arms 1 and 2
     E_I = 0.5 * ( ...
         E_arm_1 + ...
         E_arm_2 .* exp(1j * phi_bias_1));
 
-    % Second internal MZI pair.
+    % bias_2 controls relative phase between arms 3 and 4
     E_Q = 0.5 * ( ...
         E_arm_3 + ...
         E_arm_4 .* exp(1j * phi_bias_2));
-
-    % Single modeled nested-MZM output.
+    
     E_circuit = (E_I + 1j * E_Q) / sqrt(2);
 
-
     %% Step 5: Build the ideal target spectrum
+    % Only target column occupies the frequency orders listed in
+    % target_orders
+     psi_target = zeros(1, numel(order_range));
 
-    % The target is defined over the complete simulated order range.
-    psi_target = zeros(1, numel(order_range));
+     % Check
+     if numel(unique(target_orders)) ~= numel(target_orders)
+         error('target_orders must not contain duplicate frequency orders.');
+     end
 
-    % Target orders must not be repeated.
-    if numel(unique(target_orders)) ~= numel(target_orders)
-        error('target_orders must not contain duplicate frequency orders.');
-    end
+     % Insert desired complex amplitude at each target frequency order
+     for target_idx = 1:numel(target_orders)
 
-    % Insert each desired complex target coefficient.
-    for target_idx = 1:numel(target_orders)
+         % Locate the target order inside the full simulated order range.
+         order_index = find( ...
+             order_range == target_orders(target_idx), ...
+             1, ...
+             'first');
 
-        order_index = find( ...
-            order_range == target_orders(target_idx), ...
-            1, ...
-            'first');
+         % Construct the complex target value.
+         psi_target(order_index) = ...
+             target_amplitudes(target_idx) .* ...
+             exp(1j * target_phases(target_idx));
+     end
 
-        psi_target(order_index) = ...
-            target_amplitudes(target_idx) .* ...
-            exp(1j * target_phases(target_idx));
-    end
+     % Logical mask identifying the computation target freq bias
+     target_mask = ismember(order_range, target_orders);
 
-    % Desired computational orders.
-    target_mask = ismember(order_range, target_orders);
-
-    % Undesired sideband orders.
-    out_of_band_mask = ~target_mask;
-
+     % Logical mask identifying unwanted sidebands outside the target space.
+     out_of_band_mask = ~target_mask;
 
     %% Step 6: Calculate in-band mismatch and out-of-band leakage
 
-    % Total optical power across all simulated bins.
-    total_power = sum(abs(E_circuit).^2);
-
-    % Reject a candidate that produces essentially no output.
-    if total_power <= eps
-        cost = 1e6;
-        return;
-    end
-
-    % Extract the desired frequency-bin space.
-    E_in_band = E_circuit(target_mask);
-    psi_target_in_band = psi_target(target_mask);
-
-    circuit_in_band_norm = norm(E_in_band);
-    target_norm = norm(psi_target_in_band);
-
-    % Target must contain at least one nonzero coefficient.
-    if target_norm <= eps
-        error('The target spectrum must contain at least one nonzero amplitude.');
-    end
-
-    % Reject a candidate with no output in the desired bins.
-    if circuit_in_band_norm <= eps
-        cost = 1e6;
-        return;
-    end
-
-    % Normalize the realized and target fields.
-    psi_circuit_normalized = ...
-        E_in_band / circuit_in_band_norm;
-
-    psi_target_normalized = ...
-        psi_target_in_band / target_norm;
-
-    % State fidelity.
-    fidelity = abs( ...
-        psi_target_normalized * psi_circuit_normalized' ...
-        )^2;
-
-    % In-band mismatch.
-    cost_in_band = 1 - fidelity;
-
-    % Fraction of power outside the desired frequency bins.
-    out_of_band_power = ...
-        sum(abs(E_circuit(out_of_band_mask)).^2);
-
-    leakage_fraction = out_of_band_power / total_power;
-
-    % Final scalar objective minimized by PSO.
-    cost = cost_in_band + leakage_fraction;
-
+    
 end
 
-
-%% Calculate the spectrum produced by one phase-modulator arm
-
+%% Calculate arm spectrum: calculate the spectrum produced by one PM arm
 function E = calculate_arm_spectrum( ...
     beta_arm, ...
     phi_arm, ...
@@ -217,81 +162,80 @@ function E = calculate_arm_spectrum( ...
     max_bessel_order)
 
     %% Step 1: Validate and organize inputs
-
+    
+    % Convert all supplied arrays into row vectors
     beta_arm = beta_arm(:).';
     phi_arm = phi_arm(:).';
     order_range = order_range(:).';
-
+    
+    % Checks
     if numel(beta_arm) ~= numel(phi_arm)
         error('beta_arm and phi_arm must have the same length.');
     end
-
+    
     if ~isscalar(max_bessel_order) || ...
             max_bessel_order < 0 || ...
             max_bessel_order ~= floor(max_bessel_order)
-
+    
         error('max_bessel_order must be a nonnegative integer.');
     end
-
-
+    
     %% Step 2: Begin with an unmodulated optical field
-
-    % Initially, all amplitude is located at frequency order zero.
+    
     spectrum = 1;
+    
+    % Largest positive and negative order initialized
     current_max_order = 0;
-
-
-    %% Step 3: Add each RF tone to the spectrum
-
+    
+    %% Step 3: Add each tone to the spectrum
+    
+    % Number of RF tones applied to this arm.
     num_tones = numel(beta_arm);
+    
+    % Retained Bessel indices for each tone.
     q_values = -max_bessel_order:max_bessel_order;
-
+    
     for tone = 1:num_tones
-
-        % Physical frequency shifts generated by this RF harmonic.
-        tone_shifts = tone * q_values;
-
-        % Complex Bessel coefficients.
         tone_coefficients = ...
             besselj(q_values, beta_arm(tone)) .* ...
             exp(1j * q_values * phi_arm(tone));
-
-        % Largest order generated by this individual tone.
+    
+        % Max freq order produced by this tone
         tone_max_order = tone * max_bessel_order;
-
-        % Sparse spectrum for the current tone.
+    
+        % Create the sparse spectrum for RF tone
         tone_spectrum = zeros(1, 2 * tone_max_order + 1);
-
-        % Convert physical orders to MATLAB indices.
+    
+        % Convert physical frequency orders into MATLAB indices.
         tone_indices = tone_shifts + tone_max_order + 1;
-
-        % Insert the tone coefficients.
+    
+        % Store the complex Bessel coefficients.
         tone_spectrum(tone_indices) = tone_coefficients;
-
-        % Combine this tone with the preceding tones.
+    
+        % Combine this tone with all previously processed RF tones.
         spectrum = conv(spectrum, tone_spectrum);
-
-        % Update the represented frequency-order range.
+    
+        % Update the largest represented positive and negative order.
         current_max_order = current_max_order + tone_max_order;
     end
-
-
-    %% Step 4: Extract the requested frequency-bin orders
-
+    
+    %% Step 4: Extract  requested frequency-bin orders
+    
+    % Allocate the requested output spectrum.
     E = zeros(1, numel(order_range));
-
+    
     for idx = 1:numel(order_range)
-
+    
         physical_order = order_range(idx);
-
-        spectrum_index = ...
-            physical_order + current_max_order + 1;
-
-        if spectrum_index >= 1 && ...
-                spectrum_index <= numel(spectrum)
-
+    
+        % Convert the physical frequency order into an array index.
+        spectrum_index = physical_order + current_max_order + 1;
+    
+        % Orders outside the calculated spectrum remain zero.
+        if spectrum_index >= 1 && spectrum_index <= numel(spectrum)
             E(idx) = spectrum(spectrum_index);
         end
     end
 
 end
+
