@@ -15,6 +15,7 @@ group's use.
 import sys
 import numpy as np
 from itertools import product
+from scipy.io import savemat
 
 
 # --------------------------------------------------------------------- #
@@ -251,6 +252,9 @@ def main():
     D = int(sys.argv[1]) if len(sys.argv) > 1 else 4
     show = '--show' in sys.argv
     B, info = mubs(D)
+
+    U_mubs = np.stack(B, axis=2).astype(np.complex128)
+
     good, worst = verify(B, D)
     print(f"D = {D}")
     print(f"  prime power : {info['prime_power']}")
@@ -270,6 +274,18 @@ def main():
                 v = M[:, col]
                 print("    [ " + "  ".join(_fmt(z) for z in v) + " ]")
 
+    # Save the MUB matrices in MATLAB's native file format.
+    output_filename = f"mubs_D{D}.mat"
+
+    savemat(output_filename, {
+        "U_mubs": U_mubs,
+        "D": D
+    })
+
+    print(f"\nSaved MUB matrices to {output_filename}")
+    print(f"Saved array shape: {U_mubs.shape}")
+
 
 if __name__ == "__main__":
     main()
+    

@@ -142,6 +142,7 @@ def graph_trials(stats, dimensions):
     plt.show()
 
 
+
 def main():
     # Get the runtimes for each MUB, only one trial
     print("[status] Test run for D dimensions, one trial")
@@ -174,10 +175,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
 
 #  mub_gen.py D # summary: count, maximal possible, verified?
 # python mub_gen.py D 
