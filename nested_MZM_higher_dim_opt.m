@@ -21,7 +21,7 @@ close all;
 %% Step 1: Define the seed-sweep experiment
 
 % Qudit dimension.
-D = 8;
+D = 4;
 
 % The nontrivial MUB gates are U1 through UD.
 mub_numbers = 1:D;
